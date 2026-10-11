@@ -1,11 +1,19 @@
 name: Release
 
-# Erstellt ein GitHub-Release, sobald ein Tag wie v0.1.0 gepusht wird.
+# Erstellt ein GitHub-Release mit den Notizen aus CHANGELOG.md:
+# - automatisch, sobald ein Tag wie v0.1.0 gepusht wird, oder
+# - von Hand unter "Actions" → "Release" → "Run workflow" mit der Versionsnummer
+#   (dann legt der Workflow den Tag auf dem gewählten Stand selbst an).
 # Das Release enthält nur dieses Repository (Build-Skript + Firefox-Shims),
 # keine gebaute .xpi – die würde Code von Anthropic enthalten.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version ohne "v", z. B. 0.1.0 (muss in CHANGELOG.md stehen)'
+        required: true
 
 permissions:
   contents: write
@@ -19,19 +27,33 @@ jobs:
         with:
           node-version: 22
       - run: npm test
-      - name: Release-Notizen aus CHANGELOG.md lesen
+      - name: Version bestimmen
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          awk -v ver="$version" '
-            $0 ~ "^## \\[" ver "\\]" { found = 1; next }
+          if [ -n "$INPUT_VERSION" ]; then version="${INPUT_VERSION#v}"; else version="${GITHUB_REF_NAME#v}"; fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            echo "Ungültige Version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Release-Notizen aus CHANGELOG.md lesen
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v ver="$VERSION" '
+            index($0, "## [" ver "]") == 1 { found = 1; next }
             found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then
-            echo "Kein Abschnitt für $version in CHANGELOG.md gefunden." >&2
+            echo "Kein Abschnitt für $VERSION in CHANGELOG.md gefunden." >&2
             exit 1
           fi
       - name: Release erstellen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "Claude-Firefox $GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --title "Claude-Firefox $TAG" --notes-file release-notes.md --target "$GITHUB_SHA"
