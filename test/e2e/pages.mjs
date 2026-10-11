@@ -55,6 +55,28 @@ export function testPages(port) {
       headers: { Location: 'chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/oauth_callback.html?code=http-code&state=s2' },
       body: '',
     },
+    '/oauth-bad': {
+      headers: { 'Content-Type': 'text/html' },
+      body: `<!doctype html><title>OAuth fremd</title><script>setTimeout(() => {
+  location.href = 'chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/oauth_callback.html?code=evil-code&state=fremd';
+}, 200);</script>`,
+    },
+    '/keys': {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: `<!doctype html><title>Tasten</title><body style="font:16px sans-serif">
+<form id="kf"><input id="kpi"><button id="kbtn" type="submit">Senden</button></form>
+<button id="dis" disabled style="width:120px;height:30px">Aus</button>
+<p id="para">Erster Satz hier. Zweiter Satz da.</p><p>Anderer Absatz.</p>
+<script>
+  window.k = { keypress: [], submits: 0, disClicks: 0, blockEnter: false };
+  document.getElementById('kpi').addEventListener('keypress', (e) => {
+    k.keypress.push(e.keyCode);
+    if (k.blockEnter && e.keyCode === 13) e.preventDefault();
+  });
+  document.getElementById('kf').addEventListener('submit', (e) => { e.preventDefault(); k.submits++; });
+  document.addEventListener('click', (e) => { if (e.target.id === 'dis') k.disClicks++; });
+</script></body>`,
+    },
     '/api/data': { headers: { 'Content-Type': 'application/json' }, body: '{"ok":true}' },
     '/external': {
       headers: { 'Content-Type': 'text/html' },

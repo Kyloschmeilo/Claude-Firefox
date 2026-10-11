@@ -46,6 +46,19 @@
   /** @type {Map<number, {page:boolean, runtime:boolean, network:boolean, queue:Promise}>} */
   const attached = new Map();
 
+  // Firefox beendet die Event-Page nach 30 s ohne API-Aufrufe – samt diesem
+  // Zustand. Chrome hält Debugger-Sitzungen unabhängig davon. Solange Claude an
+  // einen Tab angehängt ist, halten wir den Hintergrund deshalb wach.
+  let keepAliveTimer = null;
+  function updateKeepAlive() {
+    if (attached.size && !keepAliveTimer) {
+      keepAliveTimer = setInterval(() => api.runtime.getPlatformInfo().catch(() => {}), 20000);
+    } else if (!attached.size && keepAliveTimer) {
+      clearInterval(keepAliveTimer);
+      keepAliveTimer = null;
+    }
+  }
+
   function emit(tabId, method, params) {
     const target = { tabId };
     ff.debuggerEvents?.onEvent.dispatch(target, method, params);
@@ -117,6 +130,19 @@
   }
 
   async function agentCall(tabId, op, params) {
+    const nativeTabs = [];
+    const onCreated = (t) => {
+      if (t.openerTabId === tabId) nativeTabs.push(t);
+    };
+    api.tabs.onCreated.addListener(onCreated);
+    try {
+      return await agentCallInner(tabId, op, params, nativeTabs);
+    } finally {
+      api.tabs.onCreated.removeListener(onCreated);
+    }
+  }
+
+  async function agentCallInner(tabId, op, params, nativeTabs) {
     const chain = [];
     let frameId = 0;
     let current = params;
@@ -142,6 +168,10 @@
       // Firefox blockiert Pop-ups aus synthetischen Klicks; wir öffnen sie selbst.
       const tab = await api.tabs.get(tabId).catch(() => null);
       for (const t of result.openTabs) {
+        if (t.fallback) {
+          await new Promise((r) => setTimeout(r, 150));
+          if (nativeTabs.length) continue;
+        }
         await api.tabs
           .create({
             url: t.url,
@@ -179,7 +209,9 @@
       const { x = 0, y = 0, width, height, scale = 1 } = params.clip;
       options.rect = { x, y, width, height };
       // CDP: Ausgabegröße = Breite * scale * devicePixelRatio. Firefox: Breite * scale.
-      options.scale = scale * (await devicePixelRatio(tabId));
+      // Firefox rechnet den Seiten-Zoom selbst noch einmal ein (devicePixelRatio enthält ihn schon).
+      const zoom = await api.tabs.getZoom(tabId).catch(() => 1);
+      options.scale = (scale * (await devicePixelRatio(tabId))) / (zoom || 1);
     }
     const dataUrl = await api.tabs.captureTab(tabId, options);
     return { data: dataUrl.slice(dataUrl.indexOf(',') + 1) };
@@ -222,12 +254,14 @@
       }
       let value;
       try {
-        const seen = new WeakSet();
+        // Nur echte Zyklen (Vorfahren) markieren, mehrfach genutzte Objekte bleiben erhalten.
+        const ancestors = [];
         value = JSON.parse(
-          JSON.stringify(v, (k, val) => {
+          JSON.stringify(v, function (k, val) {
             if (typeof val === 'object' && val !== null) {
-              if (seen.has(val)) return '[Circular]';
-              seen.add(val);
+              while (ancestors.length && ancestors[ancestors.length - 1] !== this) ancestors.pop();
+              if (ancestors.includes(val)) return '[Circular]';
+              ancestors.push(val);
               if (typeof Node !== 'undefined' && val instanceof Node) return `[${describeNode(val)}]`;
             }
             if (typeof val === 'bigint') return `${val}n`;
@@ -249,7 +283,14 @@
     try {
       const result = (0, eval)(expression);
       if (awaitPromise && result && typeof result.then === 'function') {
-        return Promise.resolve(result).then(pack, packError);
+        // async-Funktion statt window.Promise: zone.js & Co. ersetzen window.Promise.
+        return (async () => {
+          try {
+            return pack(await result);
+          } catch (e) {
+            return packError(e);
+          }
+        })();
       }
       return pack(result);
     } catch (e) {
@@ -303,6 +344,13 @@
 
   // --- Console-Mitschnitt ---------------------------------------------------
 
+  // Registrierungen nacheinander und ohne die Befehlswarteschlange des Tabs zu blockieren.
+  let registrationQueue = Promise.resolve();
+  function queueConsoleRegistration() {
+    registrationQueue = registrationQueue.then(updateConsoleRegistration, updateConsoleRegistration);
+    return registrationQueue;
+  }
+
   async function updateConsoleRegistration() {
     const wanted = [...attached.values()].some((st) => st.runtime);
     let registered = [];
@@ -329,14 +377,16 @@
   }
 
   async function setConsoleTracking(tabId, on) {
-    await updateConsoleRegistration();
+    queueConsoleRegistration().catch(() => {});
     // Bereits geladene Dokumente sofort versorgen.
     let frames = [{ frameId: 0 }];
     try {
       frames = (await api.webNavigation.getAllFrames({ tabId })) || frames;
     } catch {}
     await Promise.all(
-      frames.map((f) => runInFrame(tabId, f.frameId, 'console', { enabled: on }).catch(() => {})),
+      frames.map((f) =>
+        withTimeout(runInFrame(tabId, f.frameId, 'console', { enabled: on }), 1000, 'frame busy').catch(() => {}),
+      ),
     );
   }
 
@@ -368,7 +418,12 @@
       emit(d.tabId, 'Network.requestWillBeSent', {
         requestId: String(d.requestId),
         loaderId: '',
-        documentURL: d.documentUrl || d.originUrl || d.url,
+        documentURL:
+          d.type === 'main_frame'
+            ? d.url
+            : d.frameAncestors && d.frameAncestors.length
+              ? d.frameAncestors[d.frameAncestors.length - 1].url
+              : d.documentUrl || d.url,
         request: { url: d.url, method: d.method, headers: {} },
         timestamp: d.timeStamp / 1000,
         wallTime: d.timeStamp / 1000,
@@ -424,9 +479,10 @@
     api.tabs.onRemoved.addListener((tabId) => {
       if (!attached.has(tabId)) return;
       attached.delete(tabId);
+      updateKeepAlive();
       emitDetach(tabId, 'target_closed');
       updateNetworkListeners();
-      updateConsoleRegistration();
+      queueConsoleRegistration().catch(() => {});
     });
     api.webNavigation.onCommitted.addListener((d) => {
       const st = attached.get(d.tabId);
@@ -450,6 +506,10 @@
     if (!msg || typeof msg.__ffCdp !== 'string' || !sender.tab) return undefined;
     const tabId = sender.tab.id;
     const st = attached.get(tabId);
+    // Chromes Tab-Sitzung sieht keine Meldungen aus fremden (Cross-Site-)iframes.
+    if (sender.frameId !== 0 && safeOrigin(sender.url) !== safeOrigin(sender.tab.url)) {
+      return msg.__ffCdp === 'consoleQuery' ? Promise.resolve({ enabled: false }) : undefined;
+    }
     if (msg.__ffCdp === 'consoleQuery') return Promise.resolve({ enabled: !!(st && st.runtime) });
     if (msg.__ffCdp === 'console' && st && st.runtime && Array.isArray(msg.entries)) {
       for (const e of msg.entries) {
@@ -491,6 +551,7 @@
     checkAttachable(tab.url);
     ensureTabListeners();
     if (!attached.has(tabId)) attached.set(tabId, { page: false, runtime: false, network: false, queue: Promise.resolve() });
+    updateKeepAlive();
   }
 
   async function detach(target) {
@@ -498,6 +559,7 @@
     const st = attached.get(tabId);
     if (!st) throw new Error(`Debugger is not attached to the tab with id: ${tabId}.`);
     attached.delete(tabId);
+    updateKeepAlive();
     updateNetworkListeners();
     if (st.runtime) setConsoleTracking(tabId, false).catch(() => {});
   }
@@ -595,6 +657,9 @@
     st.queue = result.catch(() => {});
     return result;
   }
+
+  // Eine von einer früheren Instanz übrig gebliebene Console-Registrierung entfernen.
+  queueConsoleRegistration().catch(() => {});
 
   ff.engine = { attach, detach, sendCommand, getTargets, attached };
   ff.server.handle('debugger.attach', (_ctx, target) => attach(target));

@@ -37,7 +37,7 @@ Quelle (eine davon, sonst wird die aktuelle Version heruntergeladen):
 Weitere Optionen:
   --out <ordner>         Ausgabeordner (Standard: dist)
   --gecko-id <id>        Firefox-Add-on-ID (Standard: claude-firefox-port@localhost)
-  --version-suffix <n>   Hängt ".n" an die Versionsnummer an (für selbst signierte Builds)
+  --version-suffix <n>   Hängt ".n" an die Versionsnummer an
   --keep-name            Namen der Extension nicht um "(Firefox-Port)" ergänzen
   --no-xpi               Nur den entpackten Ordner erzeugen
   -h, --help             Diese Hilfe
@@ -191,7 +191,6 @@ export async function build(opts = {}) {
   console.log(`• ${chromeManifest.name} ${chromeManifest.version} (Chrome-ID ${chromeExtensionId})`);
 
   files.set('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2) + '\n'));
-  config.pages = [...files.keys()].filter((n) => n.endsWith('.html')).sort();
 
   // Mozilla verlangt quadratische Icons (das Original-Icon ist es nicht immer).
   const iconPaths = new Set();
@@ -211,9 +210,11 @@ export async function build(opts = {}) {
     }
   }
 
+  // Sandbox-Seiten haben keine Extension-APIs – dort keine Shims einfügen.
+  const sandboxPages = new Set(config.sandboxPages.map((p) => p.replace(/^\//, '')));
   let pages = 0;
   for (const [name, data] of files) {
-    if (name.endsWith('.html')) {
+    if (name.endsWith('.html') && !sandboxPages.has(name)) {
       files.set(name, Buffer.from(injectShims(data.toString('utf8'), PAGE_SHIMS)));
       pages++;
     }
@@ -277,7 +278,16 @@ async function main() {
   console.log('\nFertig. Installation in Firefox: siehe README.md, Abschnitt "Installation".');
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Auch über Symlinks/Junctions (Windows) als Hauptskript erkennen.
+function isMainModule() {
+  try {
+    return Boolean(process.argv[1]) && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   main().catch((err) => {
     console.error(`\nFehler: ${err.message}`);
     process.exitCode = 1;

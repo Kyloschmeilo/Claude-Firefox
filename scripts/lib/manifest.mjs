@@ -86,7 +86,6 @@ const DROPPED_KEYS = [
   'differential_fingerprint',
   'side_panel',
   'externally_connectable',
-  'sandbox',
   'oauth2',
   'export',
   'import',
@@ -280,7 +279,12 @@ export function transformManifest(chromeManifest, options = {}) {
 
   // --- Content-Security-Policy ---------------------------------------------
   if (isPlainObject(m.content_security_policy)) {
-    delete m.content_security_policy.sandbox;
+    // Firefox akzeptiert eine Sandbox-CSP nur mit "sandbox"-Direktive und ohne allow-same-origin.
+    const sb = m.content_security_policy.sandbox;
+    if (sb !== undefined && (typeof sb !== 'string' || !/(^|;)\s*sandbox(\s|;|$)/.test(sb) || /allow-same-origin/.test(sb))) {
+      delete m.content_security_policy.sandbox;
+      report.removedKeys.push('content_security_policy.sandbox');
+    }
     if (!Object.keys(m.content_security_policy).length) delete m.content_security_policy;
   } else if (typeof m.content_security_policy === 'string') {
     m.content_security_policy = { extension_pages: m.content_security_policy };
@@ -297,6 +301,7 @@ export function transformManifest(chromeManifest, options = {}) {
     externallyConnectable,
     sidePanelPath,
     sidePanelCommands,
+    sandboxPages: Array.isArray(m.sandbox?.pages) ? m.sandbox.pages.filter((p) => typeof p === 'string') : [],
   };
 
   return { manifest: m, config, report };
