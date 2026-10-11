@@ -1,0 +1,17 @@
+{
+  "name": "claude-firefox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Baut die offizielle Claude-Chrome-Extension lokal zu einem Firefox-Add-on um.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.3"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/unit/build.test.mjs test/unit/shims.test.mjs",
+    "test:e2e": "node test/e2e/run.mjs",
+    "lint": "npx --yes web-ext@8 lint --source-dir dist/extension --self-hosted"
+  },
+  "license": "MIT"
+}

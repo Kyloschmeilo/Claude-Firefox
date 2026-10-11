@@ -1,0 +1,10 @@
+# Build-Ergebnisse und heruntergeladene Pakete enthalten Code von Anthropic –
+# sie gehören nicht in dieses (öffentliche) Repository.
+dist/
+cache/
+*.crx
+*.xpi
+web-ext-artifacts/
+node_modules/
+.DS_Store
+Thumbs.db

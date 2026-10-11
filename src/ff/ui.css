@@ -1,0 +1,90 @@
+:root {
+  color-scheme: light dark;
+  --bg: #faf9f5;
+  --fg: #3d3d3a;
+  --muted: #73726c;
+  --accent: #c6613f;
+  --accent-fg: #fff;
+  --card: #fff;
+  --border: #e5e2d9;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #262624;
+    --fg: #e8e6dc;
+    --muted: #a6a39a;
+    --card: #30302e;
+    --border: #44433f;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+main {
+  max-width: 34rem;
+  padding: 24px;
+  text-align: center;
+}
+main.wide {
+  text-align: left;
+}
+h1 {
+  font-size: 1.25rem;
+  margin: 0 0 12px;
+}
+p {
+  margin: 0 0 12px;
+}
+code {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  word-break: break-all;
+}
+.muted {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+button {
+  font: inherit;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  margin: 4px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+}
+button.secondary {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+.spinner {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 16px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+.done .spinner {
+  display: none;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
