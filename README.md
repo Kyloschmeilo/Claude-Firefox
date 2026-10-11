@@ -45,7 +45,8 @@ Chrome-Funktionen ergänzen die Skripte unter `src/ff/` zur Laufzeit.
 Firefox installiert dauerhaft nur von Mozilla signierte Add-ons. Ein temporär geladenes
 Add-on verschwindet beim Beenden von Firefox. Danach lädst du es über
 `about:debugging#/runtime/this-firefox` neu (Tipp: Lesezeichen anlegen). Deine Anmeldung
-und deine Einstellungen bleiben dabei erhalten (getestet mit Firefox 157).
+und die Einstellungen der Extension bleiben dabei erhalten (getestet mit Firefox 157).
+Geänderte Tastenkombinationen setzt Firefox dagegen bei jedem Neustart zurück.
 
 > Falls die Anmeldung doch einmal verloren geht: In `about:config` die Einstellungen
 > `extensions.webextensions.keepStorageOnUninstall` und
@@ -58,31 +59,23 @@ Diese Firefox-Versionen dürfen unsignierte Add-ons dauerhaft installieren:
 1. `about:config` öffnen und `xpinstall.signatures.required` auf `false` setzen.
 2. `about:addons` öffnen → Zahnrad → „Add-on aus Datei installieren…“ → `.xpi` wählen.
 
-### C) Dauerhaft im normalen Firefox: selbst signieren (fortgeschritten, ungetestet)
-
-Mozilla kann das Add-on als „nicht gelistet“ automatisch signieren:
-
-1. Ein Konto auf [addons.mozilla.org](https://addons.mozilla.org) anlegen und unter
-   „Developer Hub“ → „API-Schlüssel“ einen Schlüssel erzeugen.
-2. Mit eigener Add-on-ID und eigener Versionsnummer bauen:
-   `node scripts\build.mjs --gecko-id claude-firefox@deinname.local --version-suffix 1`
-3. Signieren:
-   `npx web-ext sign --channel=unlisted --source-dir dist\extension --api-key=… --api-secret=…`
-4. Die signierte Datei aus `web-ext-artifacts\` per Drag & Drop in Firefox ziehen.
-
-Achtung: Dabei lädst du das Paket mit Anthropics Code zur automatischen Prüfung zu Mozilla
-hoch. Jede neue Version braucht einen neuen `--version-suffix`.
+> **Warum keine dauerhafte Installation im normalen Firefox?** Dafür müsste Mozilla das
+> Add-on signieren. Dazu lädt man das komplette Paket – also Anthropics Code – zu
+> addons.mozilla.org hoch. Das wäre eine Weitergabe an Dritte (siehe Hinweis oben) und wird
+> hier deshalb nicht beschrieben.
 
 ## Bedienung
 
 - **Claude-Symbol in der Symbolleiste:** öffnet Claude für den aktuellen Tab in der Sidebar.
 - **Tastenkürzel:** dasselbe wie in Chrome (meist `Strg+E`). Kollidiert es mit Firefox, kannst
   du es unter `about:addons` → Zahnrad → „Tastenkombinationen für Erweiterungen verwalten“
-  ändern.
+  ändern (bei Variante A nach jedem Firefox-Neustart erneut).
 - **Pro Fenster eine Claude-Sitzung:** Die Sidebar zeigt die Sitzung des Tabs, für den du
   Claude zuletzt geöffnet hast. Wechselst du den Tab, läuft eine Aufgabe weiter.
-- **Updates:** `build.cmd` erneut ausführen und die neue `.xpi`-Datei laden (Variante A:
-  in `about:debugging` „Neu laden“ bzw. neu laden).
+- **Updates:** `build.cmd` erneut ausführen. Dann in `about:debugging` über „Temporäres
+  Add-on laden…“ die **neue** Datei `dist\claude-firefox-<neue Version>.xpi` wählen
+  (Variante B: wie bei der Installation). Achtung: „Neu laden“ lädt nur die zuerst gewählte,
+  alte Datei erneut.
 
 ## Was funktioniert – und was nicht
 
@@ -91,7 +84,7 @@ hoch. Jede neue Version braucht einen neuen `--version-suffix`.
 | Chat in der Sidebar | ✅ |
 | Anmeldung über claude.ai | ✅ Die Anmelde-Nachricht von claude.ai bzw. die Weiterleitung auf `chrome-extension://…` wird abgefangen und an die Extension übergeben. Mit einem echten Konto noch nicht getestet. |
 | Seiten lesen, Elemente finden, Formulare ausfüllen | ✅ |
-| Klicken, Tippen, Tastenkürzel, Scrollen, Drag & Drop | ✅ über nachgebaute Browser-Events (Einschränkungen siehe unten) |
+| Klicken, Tippen, Tastenkürzel, Scrollen, Drag & Drop | ✅ über nachgebaute Browser-Events (Einschränkungen siehe unten; Kopieren/Einfügen per Zwischenablage geht nicht) |
 | Screenshots | ✅ |
 | JavaScript auf der Seite ausführen | ✅ außer auf Seiten mit strenger Content-Security-Policy (Firefox lässt das nicht zu; Claude bekommt dann einen Hinweis) |
 | Browser-Konsole und Netzwerk-Anfragen mitlesen | ✅ |
@@ -101,6 +94,7 @@ hoch. Jede neue Version braucht einen neuen `--version-suffix`.
 | Claude Code / Claude Desktop | ⚠️ experimentell, siehe unten |
 | Datei-Upload von lokalen Pfaden (aus Claude Code) | ❌ Firefox-Erweiterungen dürfen keine lokalen Dateien lesen |
 | Sidebar über den Knopf auf claude.ai öffnen | ⚠️ Firefox erlaubt das Öffnen nur nach einem Klick auf das Symbol. Es erscheint ein Hinweis. |
+| „Seite verlassen?“-Dialoge beim Navigieren | ⚠️ werden nicht erkannt: Claude meldet die Navigation als erfolgreich, Firefox zeigt aber seinen Dialog und bleibt auf der Seite |
 
 **Grenzen der nachgebauten Eingaben:** Chrome lässt Claude über seine Debugger-Schnittstelle
 echte Maus- und Tastatureingaben auslösen. Firefox bietet Erweiterungen das nicht an. Der
@@ -110,6 +104,8 @@ Nicht möglich sind:
 - Menüs, die nur per CSS-`:hover` aufklappen
 - native Auswahllisten aufklappen (Claude wählt Werte stattdessen direkt aus)
 - Seiten, die ausdrücklich nur „echte“ Klicks akzeptieren (`event.isTrusted`)
+- Kopieren, Ausschneiden und Einfügen über die Zwischenablage (`Strg+C`, `Strg+X`, `Strg+V`);
+  Claude tippt Text stattdessen direkt ein
 
 ## Claude Code / Claude Desktop anbinden (optional, experimentell)
 
@@ -161,7 +157,7 @@ node scripts/build.mjs --help
   --dir <ordner>         entpackte Extension, z. B. direkt aus dem Chrome-Profil:
                          %LOCALAPPDATA%\Google\Chrome\User Data\Default\Extensions\fcoeoabgfenejglbffodgkkbkcdhcgfn
   --gecko-id <id>        eigene Firefox-Add-on-ID
-  --version-suffix <n>   Versionsnummer ergänzen (für selbst signierte Builds)
+  --version-suffix <n>   Versionsnummer um ".n" ergänzen
   --keep-name            Namen nicht um „(Firefox-Port)“ ergänzen
   --no-xpi               nur den entpackten Ordner dist/extension erzeugen
 ```
@@ -176,7 +172,7 @@ FIREFOX_BIN=… GECKODRIVER_BIN=… node test/e2e/run.mjs
 
 Der End-to-End-Test installiert das gebaute Add-on in einem echten Firefox. Er ruft die
 Browser-Steuerung der Original-Extension direkt auf, also denselben Code, den Claude
-benutzt. Geprüft werden 44 Punkte, darunter:
+benutzt. Geprüft werden unter anderem:
 - Klicks, Doppelklicks und Tippen, auch mit Umlauten und Emojis
 - Tastenkürzel und Formulare
 - Scrollen und Klicks in fremden iframes

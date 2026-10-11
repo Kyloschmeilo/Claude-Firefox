@@ -40,12 +40,15 @@ Details, dauerhafte Installation und Fehlerbehebung: siehe [README](README.md).
 ### Teststand
 
 - Getestet mit Firefox 157 gegen die **ältere Extension-Version 1.0.70**. Alle Unit-Tests und alle End-to-End-Prüfungen bestehen.
+- Vor dem Release hat eine mehrstufige Code-Review 37 Fehler gefunden, alle behoben. Die meisten betrafen Randfälle der
+  nachgebauten Eingaben, darunter Enter/keypress, macOS-Tastenbefehle, deaktivierte Buttons, Tab-Reihenfolge,
+  Pop-ups, Zoom bei Screenshots und Ruhezustand des Hintergrunds. Dazu kam eine Härtung der Login-Weiterleitung.
 - **Nicht getestet:**
   - die aktuelle Extension-Version
   - die Anmeldung mit einem echten Claude-Konto
-  - die Windows-Skripte unter echtem Windows (das PowerShell-Skript ist nur auf Syntax geprüft)
+  - die Windows-Skripte unter echtem Windows (das PowerShell-Skript ist nur auf Syntax geprüft;
+    die Unit-Tests laufen in der CI auch unter Windows)
   - die Anbindung an Claude Code / Claude Desktop
-  - das Selbst-Signieren über Mozilla
 
 ### Bekannte Einschränkungen
 
@@ -53,6 +56,8 @@ Details, dauerhafte Installation und Fehlerbehebung: siehe [README](README.md).
   - CSS-Hover-Menüs
   - native Auswahllisten aufklappen
   - Seiten, die nur „echte“ Klicks akzeptieren
+- Kein Kopieren/Einfügen über die Zwischenablage (`Strg+C`/`Strg+V`).
+- „Seite verlassen?“-Dialoge beim Navigieren werden nicht erkannt.
 - Keine JavaScript-Ausführung auf Seiten mit strenger Content-Security-Policy.
 - Keine Datei-Uploads von lokalen Pfaden.
 - Im normalen Firefox nur als temporäres Add-on. Nach einem Neustart neu laden, die Anmeldung bleibt erhalten.

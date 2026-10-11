@@ -26,6 +26,12 @@ test('ZIP: CRC32 stimmt mit zlib überein', () => {
   assert.equal(crc32(Buffer.from('123456789')), 0xcbf43926);
 });
 
+test('ZIP: Ordner-Einträge mit Backslash (Windows) werden übersprungen', () => {
+  const zip = writeZip(new Map([['assets\\', Buffer.alloc(0)], ['assets\\x.js', Buffer.from('x')]]));
+  const back = readZip(zip);
+  assert.deepEqual([...back.keys()], ['assets/x.js']);
+});
+
 test('ZIP: unsichere Pfade werden abgelehnt', () => {
   const zip = writeZip(new Map([['../boese.txt', Buffer.from('x')]]));
   assert.throws(() => readZip(zip), /Unsicherer Pfad/);
@@ -161,7 +167,8 @@ const CHROME_MANIFEST = {
     { resources: ['assets/*'], matches: ['https://claude.ai/*'], use_dynamic_url: true },
     { resources: ['x'], extension_ids: ['abc'] },
   ],
-  content_security_policy: { extension_pages: "script-src 'self'", sandbox: "sandbox allow-scripts" },
+  content_security_policy: { extension_pages: "script-src 'self'", sandbox: 'sandbox allow-scripts' },
+  sandbox: { pages: ['sandbox.html'] },
   incognito: 'split',
 };
 
@@ -191,7 +198,11 @@ test('Manifest: Grundumbau Chrome -> Firefox', () => {
   assert.equal(m.web_accessible_resources.length, 1);
   assert.equal(m.web_accessible_resources[0].use_dynamic_url, undefined);
   assert.equal(m.commands['toggle-side-panel'].global, undefined);
-  assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self'" });
+  assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self'", sandbox: 'sandbox allow-scripts' });
+  assert.deepEqual(m.sandbox, { pages: ['sandbox.html'] });
+  assert.deepEqual(config.sandboxPages, ['sandbox.html']);
+  const bad = transformManifest({ ...CHROME_MANIFEST, content_security_policy: { sandbox: 'sandbox allow-scripts allow-same-origin' } });
+  assert.equal(bad.manifest.content_security_policy, undefined);
   assert.equal(m.incognito, 'spanning');
   assert.deepEqual(config.chromeExtensionIds, ['x'.repeat(32)]);
   assert.deepEqual(config.externallyConnectable, ['https://claude.ai/*']);

@@ -223,9 +223,9 @@
     const sel = window.getSelection();
     try {
       if (clicks >= 3) {
-        sel.collapse(pos.offsetNode, pos.offset);
-        sel.modify('move', 'backward', 'paragraphboundary');
-        sel.modify('extend', 'forward', 'paragraphboundary');
+        let block = pos.offsetNode.nodeType === 1 ? pos.offsetNode : pos.offsetNode.parentElement;
+        while (block && block.parentElement && /^inline/.test(getComputedStyle(block).display) && !(block.isContentEditable && !block.parentElement.isContentEditable)) block = block.parentElement;
+        if (block) sel.selectAllChildren(block);
       } else if (clicks === 2) {
         sel.collapse(pos.offsetNode, pos.offset);
         sel.modify('move', 'backward', 'word');
@@ -249,19 +249,46 @@
 
   // --- Pop-ups (Firefox blockiert Fenster aus synthetischen Klicks) ---------
 
+  function frameNamed(name) {
+    try {
+      const sel = `iframe[name="${CSS.escape(name)}"],frame[name="${CSS.escape(name)}"]`;
+      for (let w = window; ; w = w.parent) {
+        if (w.document.querySelector(sel)) return true;
+        if (w === w.parent) return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
   function withPopupCapture(fn) {
     const openTabs = [];
-    const onClick = (e) => {
+    let pending = null;
+    let pendingSubmit = null;
+    const linkTab = (e, prevent, path = e.composedPath ? e.composedPath() : []) => {
       if (e.defaultPrevented || e.isTrusted) return;
-      const path = e.composedPath ? e.composedPath() : [];
       const link = path.find((n) => n && (n.localName === 'a' || n.localName === 'area') && n.href);
       if (!link || !/^(https?|ftp|file):/i.test(link.href)) return;
-      const target = (link.getAttribute('target') || '').toLowerCase();
-      const newTab = (target && !['_self', '_top', '_parent'].includes(target)) || e.ctrlKey || e.metaKey || e.button === 1;
+      const rawTarget = link.getAttribute('target') || '';
+      const target = rawTarget.toLowerCase();
+      const newTab = target === '_blank' || (target && !['_self', '_top', '_parent'].includes(target) && !frameNamed(rawTarget)) || e.ctrlKey || e.metaKey || e.button === 1;
       if (!newTab) return;
-      e.preventDefault();
+      if (prevent) e.preventDefault();
       openTabs.push({ url: link.href, active: !(e.ctrlKey || e.metaKey || e.button === 1) });
     };
+    const onCapture = (e) => {
+      if (!e.isTrusted) pending = { e, path: e.composedPath() };
+    };
+    const onClick = (e) => {
+      if (pending && e === pending.e) pending = null;
+      linkTab(e, true);
+    };
+    const onSubmit = (e) => {
+      pendingSubmit = e;
+    };
+    window.addEventListener('click', onCapture, true);
+    window.addEventListener('auxclick', onCapture, true);
+    window.addEventListener('submit', onSubmit, true);
     window.addEventListener('click', onClick, false);
     window.addEventListener('auxclick', onClick, false);
 
@@ -273,6 +300,12 @@
       if (typeof original === 'function') {
         exportFunction(
           function (url, ...rest) {
+            if (url && /(^|[\s,])(noopener|noreferrer)\b/i.test(String(rest[1] ?? ''))) {
+              try {
+                openTabs.push({ url: new URL(String(url), document.baseURI).href, active: true });
+              } catch {}
+              return null;
+            }
             const win = Reflect.apply(original, pageWin, [url, ...rest]);
             if (!win && url) {
               try {
@@ -295,8 +328,28 @@
     } finally {
       window.removeEventListener('click', onClick, false);
       window.removeEventListener('auxclick', onClick, false);
+      window.removeEventListener('click', onCapture, true);
+      window.removeEventListener('auxclick', onCapture, true);
+      window.removeEventListener('submit', onSubmit, true);
       if (restore) restore();
     }
+    // Page called stopPropagation(): the bubble listener never ran, Firefox blocked the popup.
+    const before = openTabs.length;
+    if (pending) linkTab(pending.e, false, pending.path);
+    if (pendingSubmit && !pendingSubmit.defaultPrevented) {
+      try {
+        const form = pendingSubmit.target;
+        const sub = pendingSubmit.submitter;
+        const tgt = ((sub && sub.getAttribute('formtarget')) ?? form.getAttribute('target') ?? '').toLowerCase();
+        const method = ((sub && sub.getAttribute('formmethod')) || form.getAttribute('method') || 'get').toLowerCase();
+        if (tgt === '_blank' && method === 'get') {
+          const u = new URL(sub && sub.hasAttribute('formaction') ? sub.formAction : form.action);
+          u.search = new URLSearchParams(new FormData(form, sub || undefined)).toString();
+          openTabs.push({ url: u.href, active: true });
+        }
+      } catch {}
+    }
+    for (let i = before; i < openTabs.length; i++) openTabs[i].fallback = true;
     return openTabs.length ? { openTabs } : {};
   }
 
@@ -384,6 +437,8 @@
       }
       case 'mousePressed': {
         updateHover(target, p);
+        state.lastPress = target;
+        if (target.closest && target.closest('button:disabled,input:disabled,select:disabled,textarea:disabled')) { state.down = null; return {}; }
         const pointerOk = fire(target, 'pointerdown', pointerInit(p, { buttons: p.buttons || 1 }), PointerEvent);
         const mouseOk = pointerOk ? fire(target, 'mousedown', mouseInit(p)) : false;
         state.down = { target, button: p.button, suppressMouse: !pointerOk };
@@ -393,6 +448,7 @@
       }
       case 'mouseReleased': {
         updateHover(target, p);
+        if (target.closest && target.closest('button:disabled,input:disabled,select:disabled,textarea:disabled')) { state.down = null; return {}; }
         const down = state.down;
         state.down = null;
         fire(target, 'pointerup', pointerInit(p, { buttons: 0 }), PointerEvent);
@@ -401,6 +457,7 @@
           dragEnd(target, p);
           return {};
         }
+        if (!down) return {};
         const clickTarget = commonAncestor(down ? down.target : target, target);
         const button = p.button || 'left';
         return withPopupCapture(() => {
@@ -634,6 +691,15 @@
       End: ['forward', word ? 'documentboundary' : 'lineboundary'],
     };
     const m = map[key];
+    if (m && m[1] === 'documentboundary') {
+      let host = sel.focusNode && (sel.focusNode.nodeType === 1 ? sel.focusNode : sel.focusNode.parentElement);
+      while (host && host.parentElement && host.parentElement.isContentEditable) host = host.parentElement;
+      if (!host) return;
+      const off = m[0] === 'forward' ? host.childNodes.length : 0;
+      if (shift) sel.extend(host, off);
+      else sel.collapse(host, off);
+      return;
+    }
     if (m) {
       try {
         sel.modify(alter, m[0], m[1]);
@@ -679,7 +745,14 @@
     copy: () => document.execCommand('copy'),
     cut: () => document.execCommand('cut'),
     paste: () => document.execCommand('paste'),
-    insertNewline: () => document.execCommand('insertParagraph'),
+    insertNewline: (el) => (el && el.localName === 'input' ? false : document.execCommand('insertParagraph')),
+    deleteToBeginningOfLine: (el) => {
+      if (isTextField(el)) {
+        const e = el.selectionEnd;
+        if (e === el.selectionStart) el.setSelectionRange(lineBounds(el.value, e)[0], e);
+      } else if (window.getSelection().isCollapsed) window.getSelection().modify('extend', 'backward', 'lineboundary');
+      document.execCommand('delete');
+    },
     insertLineBreak: () => document.execCommand('insertLineBreak'),
   };
   const CARET_COMMANDS = {
@@ -699,18 +772,26 @@
     moveWordRightAndModifySelection: ['ArrowRight', true, true],
     moveToBeginningOfLineAndModifySelection: ['Home', true, false],
     moveToEndOfLineAndModifySelection: ['End', true, false],
+    moveToLeftEndOfLine: ['Home', false, false],
+    moveToRightEndOfLine: ['End', false, false],
+    moveToLeftEndOfLineAndModifySelection: ['Home', true, false],
+    moveToRightEndOfLineAndModifySelection: ['End', true, false],
+    moveUpAndModifySelection: ['ArrowUp', true, false],
+    moveDownAndModifySelection: ['ArrowDown', true, false],
+    moveToBeginningOfDocumentAndModifySelection: ['Home', true, true],
+    moveToEndOfDocumentAndModifySelection: ['End', true, true],
   };
 
   function runEditCommand(name, el) {
     const cmd = String(name).replace(/:$/, '');
     if (EDIT_COMMANDS[cmd]) {
       try {
-        EDIT_COMMANDS[cmd](el);
+        return EDIT_COMMANDS[cmd](el) !== false;
       } catch {}
       return true;
     }
     const caret = CARET_COMMANDS[cmd];
-    if (caret) {
+    if (caret && (isTextField(el) || isEditable(el))) {
       if (isTextField(el)) moveCaretInField(el, ...caret);
       else moveCaretInEditable(...caret);
       return true;
@@ -733,7 +814,8 @@
       End: [0, se.scrollHeight],
     };
     const d = deltas[key];
-    if (d) scrollFrom(target === document.body ? null : target, d[0], d[1]);
+    const start = target === document.body || target === document.documentElement ? (state.lastPress && state.lastPress.isConnected ? state.lastPress : null) : target;
+    if (d) scrollFrom(start, d[0], d[1]);
   }
 
   function changeSelect(select, key) {
@@ -758,10 +840,10 @@
 
     switch (key) {
       case 'Enter':
-        if (target.localName === 'input') return implicitSubmit(target);
+        if (target.localName === 'input') return ['submit', 'image', 'reset', 'button'].includes(target.type) ? clickElement(target) : implicitSubmit(target);
         if (target.localName === 'textarea') insertText('\n');
         else if (isEditable(target)) document.execCommand(shift ? 'insertLineBreak' : 'insertParagraph');
-        else if (target.localName === 'a' || target.localName === 'button' || target.getAttribute('role') === 'button' || target.getAttribute('role') === 'link') {
+        else if ((target.localName === 'a' && target.hasAttribute('href')) || target.localName === 'button' || target.localName === 'summary') {
           return clickElement(target);
         }
         return {};
@@ -774,13 +856,28 @@
       case 'Tab':
         moveFocus(shift ? -1 : 1);
         return {};
+      case 'Escape': {
+        const dlg = [...document.querySelectorAll('dialog:modal')].pop();
+        if (dlg) { if (dlg.dispatchEvent(new Event('cancel', { cancelable: true }))) dlg.close(); }
+        else { const pop = [...document.querySelectorAll('[popover]:popover-open')].filter((e) => e.getAttribute('popover') !== 'manual').pop(); if (pop) pop.hidePopover(); }
+        return {};
+      }
       case 'ArrowLeft':
       case 'ArrowRight':
       case 'ArrowUp':
       case 'ArrowDown':
       case 'Home':
       case 'End':
-        if (field) moveCaretInField(target, key, shift, wordMod);
+        if (target.localName === 'input' && target.type === 'number' && (key === 'ArrowUp' || key === 'ArrowDown')) {
+          try { key === 'ArrowUp' ? target.stepUp() : target.stepDown(); } catch {}
+          target.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          target.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (target.localName === 'input' && target.type === 'radio') {
+          const group = [...(target.form ? target.form.elements : document.querySelectorAll('input[type=radio]'))].filter((r) => r.type === 'radio' && r.name === target.name && !r.matches(':disabled'));
+          const step = key === 'ArrowDown' || key === 'ArrowRight' ? 1 : -1;
+          const next = group[(group.indexOf(target) + step + group.length) % group.length];
+          if (next && next !== target) { next.focus(); next.checked = true; next.dispatchEvent(new Event('input', { bubbles: true, composed: true })); next.dispatchEvent(new Event('change', { bubbles: true })); }
+        } else if (field) moveCaretInField(target, key, shift, wordMod);
         else if (isEditable(target)) moveCaretInEditable(key, shift, wordMod);
         else if (target.localName === 'select' && !key.startsWith('Home') && !key.startsWith('End')) changeSelect(target, key);
         else keyScroll(target, key, shift);
@@ -811,16 +908,25 @@
     const name = el.localName;
     if (name === 'button' || name === 'summary') return true;
     if (name === 'input' && ['button', 'submit', 'reset', 'checkbox', 'radio', 'image'].includes(el.type)) return true;
-    const role = el.getAttribute('role');
-    return role === 'button' || role === 'checkbox' || role === 'switch' || role === 'menuitem' || role === 'tab';
+    return false;
   }
 
   function focusableElements() {
     const selector =
       'a[href], area[href], button, input, select, textarea, iframe, summary, [tabindex], [contenteditable=""], [contenteditable="true"]';
-    const all = [...document.querySelectorAll(selector)].filter((el) => {
-      if (el.disabled || el.getAttribute('tabindex') === '-1') return false;
+    const found = [];
+    const collect = (root) => {
+      for (const el of root.querySelectorAll('*')) {
+        if (el.matches(selector)) found.push(el);
+        const sr = shadowRootOf(el);
+        if (sr) collect(sr);
+      }
+    };
+    collect(document);
+    const all = found.filter((el) => {
+      if (el.matches(':disabled') || el.getAttribute('tabindex') === '-1' || el.closest('[inert]')) return false;
       if (el.localName === 'input' && el.type === 'hidden') return false;
+      if (el.checkVisibility && !el.checkVisibility({ visibilityProperty: true })) return false;
       const r = el.getBoundingClientRect();
       return r.width > 0 || r.height > 0;
     });
@@ -831,15 +937,18 @@
   function moveFocus(dir) {
     const list = focusableElements();
     if (!list.length) return;
-    const current = document.activeElement;
-    let i = list.indexOf(current);
-    i = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
-    const next = list[i];
-    next.focus();
-    if (isTextField(next)) {
-      try {
-        next.select();
-      } catch {}
+    let i = list.indexOf(deepActiveElement());
+    for (let n = 0; n < list.length; n++) {
+      i = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
+      const next = list[i];
+      next.focus();
+      if (deepActiveElement() !== next) continue;
+      if (isTextField(next)) {
+        try {
+          next.select();
+        } catch {}
+      }
+      return;
     }
   }
 
@@ -862,10 +971,15 @@
         const code = text.codePointAt(0);
         // Kein Textfeld fokussiert (z. B. Leertaste auf der Seite): Standardaktion statt Text.
         if (fireKey(target, 'keypress', p, 0, code) && !insertText(text)) result = defaultKeyAction(target, p) || {};
+      } else if (p.type === 'keyDown' && (text === '\r' || text === '\n') && !commandModifier) {
+        if (!fireKey(target, 'keypress', p, 0, 13)) return {};
+        if (!(p.commands && p.commands.length)) result = defaultKeyAction(target, p) || {};
       } else if (!(p.commands && p.commands.length)) {
         result = defaultKeyAction(target, p) || {};
       }
-      for (const c of p.commands || []) runEditCommand(c, target);
+      let handled = false;
+      for (const c of p.commands || []) handled = runEditCommand(c, target) || handled;
+      if (p.commands && p.commands.length && !handled) result = defaultKeyAction(target, p) || {};
       return result;
     }
     if (p.type === 'keyUp') {
@@ -933,18 +1047,45 @@
         return raw.stack ? `${raw.name}: ${raw.message}\n${raw.stack}` : `${raw.name}: ${raw.message}`;
       }
       if (raw && typeof raw.nodeType === 'number') return describeNode(raw);
+      const MAX = 5000;
       const seen = new WeakSet();
-      const json = JSON.stringify(raw, (k, v) => {
-        if (typeof v === 'object' && v !== null) {
-          if (seen.has(v)) return '[Circular]';
+      let out = '';
+      const walk = (v, depth) => {
+        if (out.length > MAX) return;
+        const t = typeof v;
+        if (v === null) out += 'null';
+        else if (t === 'string') out += JSON.stringify(v.length > 500 ? `${v.slice(0, 500)}…` : v);
+        else if (t === 'number' || t === 'boolean' || t === 'undefined' || t === 'symbol') out += String(v);
+        else if (t === 'bigint') out += `${v}n`;
+        else if (t === 'function') out += '"[Function]"';
+        else if (typeof v.nodeType === 'number') out += JSON.stringify(describeNode(v));
+        else if (Object.prototype.toString.call(v) === '[object Window]') out += '"[Window]"';
+        else if (seen.has(v)) out += '"[Circular]"';
+        else {
+          const isArr = Array.isArray(v);
+          if (depth >= 3) {
+            out += isArr ? `"[Array(${v.length})]"` : '"{…}"';
+            return;
+          }
           seen.add(v);
+          const keys = isArr ? Array.from({ length: Math.min(v.length, 50) }, (_, i) => String(i)) : Object.keys(v).slice(0, 100);
+          out += isArr ? '[' : '{';
+          keys.forEach((k, i) => {
+            if (out.length > MAX) return;
+            if (i) out += ',';
+            if (!isArr) out += `${JSON.stringify(k)}:`;
+            const d = Object.getOwnPropertyDescriptor(v, k);
+            if (d && (d.get || d.set)) out += '"[Getter]"';
+            else walk(d ? d.value : undefined, depth + 1);
+          });
+          if (isArr && v.length > 50) out += ',"…"';
+          out += isArr ? ']' : '}';
+          // Nur Vorfahren zählen als Zyklus; mehrfach genutzte Objekte normal ausgeben.
+          seen.delete(v);
         }
-        if (typeof v === 'function') return '[Function]';
-        if (typeof v === 'bigint') return `${v}n`;
-        return v;
-      });
-      if (json === undefined) return String(raw);
-      return json.length > 5000 ? `${json.slice(0, 5000)}…` : json;
+      };
+      walk(raw, 0);
+      return out.length > MAX ? `${out.slice(0, MAX)}…` : out;
     } catch {
       try {
         return String(value);
@@ -1062,6 +1203,17 @@
         exportFunction(hook, pageConsole, { defineAs: level });
       } catch {}
     }
+    // Meldungen kurz vor einer Navigation nicht verlieren.
+    window.addEventListener(
+      'pagehide',
+      () => {
+        if (con.timer) {
+          clearTimeout(con.timer);
+          flushConsole();
+        }
+      },
+      true,
+    );
     window.addEventListener('error', onPageError, true);
     window.addEventListener('unhandledrejection', onRejection, true);
   }

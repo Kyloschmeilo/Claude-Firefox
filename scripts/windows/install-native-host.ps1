@@ -46,12 +46,13 @@ foreach ($name in $hostNames) {
       if ($chromeManifest) { break }
     }
   }
-  if (-not $chromeManifest -or -not (Test-Path $chromeManifest)) {
+  if (-not $chromeManifest -or -not (Test-Path -LiteralPath $chromeManifest)) {
     Write-Host "  - $name : keine Chrome-Registrierung gefunden (Programm nicht installiert oder nicht für Chrome eingerichtet)."
     continue
   }
 
-  $json = Get-Content -Raw -Path $chromeManifest | ConvertFrom-Json
+  # Claude Code/Desktop schreiben UTF-8 ohne BOM; Windows PowerShell 5.1 läse sonst ANSI.
+  $json = Get-Content -Raw -Encoding UTF8 -LiteralPath $chromeManifest | ConvertFrom-Json
   $hostPath = [string]$json.path
   if (-not [System.IO.Path]::IsPathRooted($hostPath)) {
     $hostPath = Join-Path (Split-Path -Parent $chromeManifest) $hostPath

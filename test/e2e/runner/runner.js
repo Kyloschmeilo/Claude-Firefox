@@ -275,6 +275,33 @@ async function run() {
     check('DOM-Knoten', r.result && r.result.subtype === 'node' && r.result.description === 'body', r);
   });
 
+  await step('Regressionen Tastatur/Klick', async () => {
+    const t = await chrome.tabs.create({ url: `${BASE}/keys`, active: true });
+    await waitTab(t.id);
+    await cdp.attachDebugger(t.id);
+    let p = await center(t.id, '#kpi');
+    await cdp.click(t.id, p.x, p.y);
+    await cdp.pressKeyChord(t.id, 'Enter');
+    let v = await inPage(t.id, () => ({ keypress: window.k.keypress.slice(), submits: window.k.submits }));
+    check('Enter löst keypress (13) aus und sendet ab', v.keypress.includes(13) && v.submits === 1, v);
+    await inPage(t.id, () => (window.k.blockEnter = true));
+    await cdp.pressKeyChord(t.id, 'Enter');
+    v = await inPage(t.id, () => window.k.submits);
+    check('Abgebrochenes keypress verhindert das Absenden', v === 1, v);
+    p = await center(t.id, '#dis');
+    await cdp.click(t.id, p.x, p.y);
+    v = await inPage(t.id, () => window.k.disClicks);
+    check('Klick auf deaktivierten Button löst nichts aus', v === 0, v);
+    p = await inPage(t.id, () => {
+      const r = document.getElementById('para').getBoundingClientRect();
+      return { x: r.left + 20, y: r.top + r.height / 2 };
+    });
+    await cdp.click(t.id, p.x, p.y, 'left', 3);
+    v = await inPage(t.id, () => window.getSelection().toString().trim());
+    check('Dreifachklick markiert den Absatz', v === 'Erster Satz hier. Zweiter Satz da.', v);
+    await chrome.tabs.update(tabId, { active: true });
+  });
+
   await step('CSP-Seite', async () => {
     const t2 = await chrome.tabs.create({ url: `${BASE}/csp`, active: true });
     await waitTab(t2.id);
@@ -385,11 +412,13 @@ async function run() {
     check('Nachricht von Webseite an Extension', /Untrusted origin|exists/.test(title), title);
   });
 
-  for (const [path, code] of [
-    ['/oauth-js', 'js-code'],
-    ['/oauth-302', 'http-code'],
+  for (const [path, code, state] of [
+    ['/oauth-js', 'js-code', 's1'],
+    ['/oauth-302', 'http-code', 's2'],
   ]) {
     await step(`OAuth-Weiterleitung ${path}`, async () => {
+      // So, als hätte die Extension die Anmeldung mit diesem state gestartet.
+      await chrome.storage.local.set({ oauthState: state });
       await chrome.tabs.create({ url: `${BASE}${path}`, active: false });
       let last = null;
       for (let i = 0; i < 40 && !(last && last.url.includes(code)); i++) {
@@ -401,6 +430,17 @@ async function run() {
       check(`OAuth-Weiterleitung abgefangen (${path})`, last && last.url.includes(code) && answered, last);
     });
   }
+
+  await step('OAuth-Weiterleitung mit fremdem state', async () => {
+    await chrome.storage.local.set({ oauthState: 'eigener-state' });
+    await chrome.tabs.create({ url: `${BASE}/oauth-bad`, active: false });
+    let last = null;
+    for (let i = 0; i < 30 && !(last && last.url.includes('evil-code')); i++) {
+      await sleep(100);
+      last = await globalThis.__ff.bg.call('shim.lastRedirect');
+    }
+    check('Fremde OAuth-Weiterleitung wird ignoriert', last && last.url.includes('evil-code') && last.via === 'ignored', last);
+  });
 
   await step('Seitenpanel lädt', async () => {
     const frame = document.createElement('iframe');

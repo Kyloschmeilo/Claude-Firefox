@@ -295,17 +295,20 @@
     if (handledRedirects.has(url)) return;
     handledRedirects.set(url, now);
 
-    const path = (m[2] || '/').replace(/^\//, '');
-    const rest = url.slice(m[0].length);
-    const pageUrl = api.runtime.getURL(path) + rest;
-    // Gibt es die Zielseite in der Extension, laden wir sie (wie Chrome es täte).
-    const exists = !!path && (config.pages || []).includes(path);
-    if (exists && tab && tab.id != null) {
-      ff.lastRedirect = { url, at: now, via: 'page' };
-      await api.tabs.update(tab.id, { url: pageUrl }).catch((err) => ff.warn(err));
+    // Nur Weiterleitungen zu einer Anmeldung, die die Extension selbst gestartet
+    // hat: Der state-Parameter muss zum gespeicherten oauthState passen. So kann
+    // keine fremde Seite einen eigenen Login-Code unterschieben.
+    let state = null;
+    try {
+      state = new URL(url).searchParams.get('state');
+    } catch {}
+    const { oauthState } = await api.storage.local.get('oauthState');
+    if (!state || state !== oauthState) {
+      ff.lastRedirect = { url, at: now, via: 'ignored', reason: 'state' };
+      ff.warn('OAuth-Weiterleitung ignoriert: state passt nicht zur gestarteten Anmeldung.');
       return;
     }
-    // Sonst so tun, als hätte claude.ai die Weiterleitung per Nachricht geschickt.
+    // So behandeln, als hätte claude.ai die Weiterleitung per Nachricht geschickt.
     const sender = { url: tab && tab.url, origin, tab, frameId: 0, documentLifecycle: 'active' };
     const result = await dispatchExternal({ type: 'oauth_redirect', redirect_uri: url }, sender);
     ff.lastRedirect = { url, at: now, via: 'message', result };
@@ -326,7 +329,7 @@
             .then((tab) => handleRedirect(d.redirectUrl, tab, origin))
             .catch(() => handleRedirect(d.redirectUrl, { id: d.tabId }, origin));
         },
-        { urls: config.externallyConnectable, types: ['main_frame', 'sub_frame'] },
+        { urls: config.externallyConnectable, types: ['main_frame'] },
       );
     } catch (err) {
       ff.warn('webRequest.onBeforeRedirect nicht verfügbar:', err);

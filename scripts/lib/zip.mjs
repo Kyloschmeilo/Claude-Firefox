@@ -60,7 +60,8 @@ export function readZip(buf) {
     const name = buf.toString(flags & 0x0800 ? 'utf8' : 'latin1', p + 46, p + 46 + nameLen);
     p += 46 + nameLen + extraLen + commentLen;
 
-    if (name.endsWith('/')) continue;
+    // Ordner-Einträge überspringen (auch "ordner\" aus Windows-ZIPs).
+    if (name.replace(/\\/g, '/').endsWith('/')) continue;
     if (flags & 0x1) throw new Error(`Verschlüsselte ZIP-Einträge werden nicht unterstützt: ${name}`);
     if (buf.readUInt32LE(localOffset) !== SIG_LOCAL) throw new Error(`Beschädigtes ZIP (Local Header für ${name}).`);
     const localNameLen = buf.readUInt16LE(localOffset + 26);

@@ -2,11 +2,6 @@ MIT License
 
 Copyright (c) 2026 Kyloschmeilo
 
-Diese Lizenz gilt nur für den Code in diesem Repository (Build-Skripte,
-Firefox-Kompatibilitätsschicht, Tests). Die Claude-Browser-Extension selbst ist
-Eigentum von Anthropic, nicht Teil dieses Repositorys und steht nicht unter
-dieser Lizenz.
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
