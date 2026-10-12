@@ -37,7 +37,8 @@ Quelle (eine davon, sonst wird die aktuelle Version heruntergeladen):
 Weitere Optionen:
   --out <ordner>         Ausgabeordner (Standard: dist)
   --gecko-id <id>        Firefox-Add-on-ID (Standard: claude-firefox-port@localhost)
-  --version-suffix <n>   Hängt ".n" an die Versionsnummer an
+  --version-suffix <n>   Zähler 0–99 für die letzte Stelle der Versionsnummer. Nur nötig,
+                         wenn du dieselbe Port-Version erneut zu addons.mozilla.org hochlädst.
   --name <text>          Eigener Name für das Add-on (ohne "Firefox", sonst lehnt AMO ab)
   --keep-name            Namen der Extension nicht um "(inoffizieller Port)" ergänzen
   --no-xpi               Nur den entpackten Ordner erzeugen
@@ -265,8 +266,8 @@ async function main() {
     console.log(HELP);
     return;
   }
-  if (values['version-suffix'] && !/^\d+$/.test(values['version-suffix'])) {
-    throw new Error('--version-suffix muss eine Zahl sein.');
+  if (values['version-suffix'] && !/^\d{1,2}$/.test(values['version-suffix'])) {
+    throw new Error('--version-suffix muss eine Zahl von 0 bis 99 sein.');
   }
   await build({
     crx: values.crx,

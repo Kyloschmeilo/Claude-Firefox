@@ -2,6 +2,25 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionsnummern folgen [SemVer](https://semver.org/lang/de/).
 
+## [0.1.3] – 2026-10-12
+
+### Geändert
+
+- Die Versionsnummer des Add-ons bekommt automatisch eine vierte Stelle aus der Port-Version, z. B.
+  `1.0.100.10300` für Port 0.1.3. Jede neue Port-Version hat damit eine höhere Nummer, auch beim Bauen per
+  Doppelklick auf `build.cmd`. addons.mozilla.org nimmt jede Versionsnummer nur einmal an. Bisher musste man dafür
+  `--version-suffix` angeben.
+- `--version-suffix <n>` (0–99) erhöht jetzt nur noch die letzte Stelle, z. B. `1.0.100.10301`. Nötig nur, wenn
+  dieselbe Port-Version noch einmal hochgeladen werden muss.
+
+### So benutzt du es
+
+Quellcode herunterladen, entpacken, `build.cmd` doppelklicken. Die neue `.xpi` aus `dist\` hat eine höhere Version
+als alle bisherigen Builds und kann auf addons.mozilla.org als neue Version hochgeladen werden.
+
+> Inoffizielles Projekt, nicht von Anthropic. Die Extension ist proprietäre Software von Anthropic. Nutzung nur privat
+> und auf eigenes Risiko. Gebaute Dateien nicht weitergeben.
+
 ## [0.1.2] – 2026-10-12
 
 ### Behoben

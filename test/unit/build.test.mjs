@@ -220,6 +220,13 @@ test('Manifest: Optionen', () => {
   });
   assert.equal(m.name, 'Claude');
   assert.equal(m.version, '1.2.3.7');
+  // Ohne Optionen: Port-Version als vierte Stelle, damit jede Port-Version höher ist.
+  assert.equal(transformManifest(CHROME_MANIFEST, { portVersion: '0.1.3' }).manifest.version, '1.2.3.10300');
+  assert.equal(transformManifest(CHROME_MANIFEST, { portVersion: '0.1.3', versionSuffix: '2' }).manifest.version, '1.2.3.10302');
+  assert.equal(transformManifest(CHROME_MANIFEST, { portVersion: '1.0.0' }).manifest.version, '1.2.3.1000000');
+  const four = transformManifest({ ...CHROME_MANIFEST, version: '1.2.3.4' }, { portVersion: '0.1.3' });
+  assert.equal(four.manifest.version, '1.2.3.4');
+  assert.ok(four.report.warnings.some((w) => /4 Stellen/.test(w)));
   assert.equal(transformManifest(CHROME_MANIFEST, { name: '  Mein Claude ' }).manifest.name, 'Mein Claude');
   assert.ok(transformManifest(CHROME_MANIFEST, { name: 'Claude für Firefox' }).report.warnings.some((w) => /Firefox/.test(w)));
   assert.equal(m.browser_specific_settings.gecko.id, 'ich@beispiel');

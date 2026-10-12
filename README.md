@@ -158,11 +158,17 @@ node scripts/build.mjs --help
   --dir <ordner>         entpackte Extension, z. B. direkt aus dem Chrome-Profil:
                          %LOCALAPPDATA%\Google\Chrome\User Data\Default\Extensions\fcoeoabgfenejglbffodgkkbkcdhcgfn
   --gecko-id <id>        eigene Firefox-Add-on-ID
-  --version-suffix <n>   Versionsnummer um ".n" ergänzen
+  --version-suffix <n>   Zähler 0–99 für die letzte Stelle der Versionsnummer
   --name <text>          eigener Name für das Add-on (ohne „Firefox“)
   --keep-name            Namen nicht um „(inoffizieller Port)“ ergänzen
   --no-xpi               nur den entpackten Ordner dist/extension erzeugen
 ```
+
+Die Versionsnummer des Add-ons ist die der Original-Extension plus eine vierte Stelle aus
+der Port-Version, z. B. `1.0.100.10300` für Port 0.1.3. Jede neue Port-Version bekommt so
+automatisch eine höhere Nummer. `--version-suffix 1`, `2`, … erhöht die letzte Stelle
+zusätzlich (z. B. `1.0.100.10301`), falls du dieselbe Port-Version noch einmal neu bauen
+musst.
 
 ## Entwicklung und Tests
 
