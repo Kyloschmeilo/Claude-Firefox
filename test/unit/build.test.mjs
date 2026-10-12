@@ -185,7 +185,7 @@ test('Manifest: Grundumbau Chrome -> Firefox', () => {
   assert.deepEqual(m.options_ui, { page: 'options.html', open_in_tab: true });
   assert.equal(m.browser_specific_settings.gecko.id, 'claude-firefox-port@localhost');
   for (const p of ['sidePanel', 'debugger', 'offscreen', 'system.display']) assert.ok(!m.permissions.includes(p), p);
-  for (const p of ['tabs', 'storage', 'tabGroups', 'nativeMessaging', 'scripting', 'webNavigation', 'webRequest']) {
+  for (const p of ['tabs', 'storage', 'tabGroups', 'nativeMessaging', 'scripting', 'webNavigation', 'webRequest', 'declarativeNetRequestWithHostAccess']) {
     assert.ok(m.permissions.includes(p), p);
   }
   assert.equal(m.optional_permissions, undefined);
@@ -196,6 +196,7 @@ test('Manifest: Grundumbau Chrome -> Firefox', () => {
   assert.equal(bridge.length, 2);
   assert.equal(bridge[0].world, 'MAIN');
   assert.deepEqual(bridge[0].matches, ['https://claude.ai/*']);
+  assert.ok(bridge.every((c) => c.all_frames === true), 'Brücke auch in eingebetteten Rahmen');
   assert.equal(m.web_accessible_resources.length, 1);
   assert.equal(m.web_accessible_resources[0].use_dynamic_url, undefined);
   assert.equal(m.commands['toggle-side-panel'].global, undefined);

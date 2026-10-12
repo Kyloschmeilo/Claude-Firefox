@@ -76,7 +76,7 @@ const FIREFOX_PERMISSIONS = new Set([
 ]);
 
 // Werden für die Firefox-Ersatzfunktionen gebraucht.
-const REQUIRED_PERMISSIONS = ['tabs', 'scripting', 'webNavigation', 'webRequest', 'storage'];
+const REQUIRED_PERMISSIONS = ['tabs', 'scripting', 'webNavigation', 'webRequest', 'storage', 'declarativeNetRequestWithHostAccess'];
 
 // Manifest-Schlüssel, die Firefox nicht kennt oder die hier nichts bringen.
 const DROPPED_KEYS = [
@@ -255,9 +255,11 @@ export function transformManifest(chromeManifest, options = {}) {
   }
   if (externallyConnectable.length) {
     // Ersatz für externally_connectable: claude.ai spricht über diese Brücke mit der Extension.
+    // all_frames: claude.ai kann auch eingebettet im Seitenpanel laufen.
+    const bridge = { matches: externallyConnectable, run_at: 'document_start', all_frames: true };
     contentScripts.push(
-      { matches: externallyConnectable, js: ['ff/claude-bridge-main.js'], run_at: 'document_start', world: 'MAIN' },
-      { matches: externallyConnectable, js: ['ff/claude-bridge.js'], run_at: 'document_start' },
+      { ...bridge, js: ['ff/claude-bridge-main.js'], world: 'MAIN' },
+      { ...bridge, js: ['ff/claude-bridge.js'] },
     );
   } else {
     report.warnings.push('Kein externally_connectable im Manifest – Login über claude.ai evtl. nicht möglich.');

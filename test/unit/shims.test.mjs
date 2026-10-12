@@ -36,7 +36,15 @@ function loadShims() {
         return Promise.resolve('id');
       },
     },
-    declarativeNetRequest: {},
+    declarativeNetRequest: {
+      sessionRules: [],
+      async getSessionRules() {
+        return this.sessionRules.map((r) => ({ ...r }));
+      },
+      async updateSessionRules({ removeRuleIds = [], addRules = [] } = {}) {
+        this.sessionRules = this.sessionRules.filter((r) => !removeRuleIds.includes(r.id)).concat(addRules);
+      },
+    },
   };
   const context = vm.createContext({
     browser,
@@ -139,6 +147,20 @@ test('declarativeNetRequest-Konstanten werden ergänzt', () => {
   assert.equal(dnr.HeaderOperation.SET, 'set');
   assert.equal(dnr.ResourceType.XMLHTTPREQUEST, 'xmlhttprequest');
   assert.equal(dnr.ResourceType.MAIN_FRAME, 'main_frame');
+});
+
+test('Eigene Sitzungsregeln sind für das Original unsichtbar und nicht löschbar', async () => {
+  const { ff, browser } = loadShims();
+  const dnr = browser.declarativeNetRequest;
+  const [own] = ff.sessionRules.ids;
+  await ff.sessionRules.update({ addRules: [{ id: own }] });
+  await dnr.updateSessionRules({ addRules: [{ id: 5 }] });
+  assert.deepEqual((await dnr.getSessionRules()).map((r) => r.id), [5]);
+  const viaCallback = await new Promise((resolve) => dnr.getSessionRules((rules) => resolve(rules.map((r) => r.id))));
+  assert.deepEqual(viaCallback, [5]);
+  // Original räumt alles auf, was es sieht – und auch mehr.
+  await dnr.updateSessionRules({ removeRuleIds: [5, own] });
+  assert.deepEqual((await ff.sessionRules.get()).map((r) => r.id), [own]);
 });
 
 test('Offscreen-API ist vorhanden', () => {

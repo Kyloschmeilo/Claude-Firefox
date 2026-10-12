@@ -77,6 +77,40 @@ export function testPages(port) {
   document.addEventListener('click', (e) => { if (e.target.id === 'dis') k.disClicks++; });
 </script></body>`,
     },
+    // Verbietet das Einbetten (wie claude.ai). In Seiten der Extension muss es trotzdem gehen.
+    '/noframe': {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'X-Frame-Options': 'DENY',
+        'Content-Security-Policy': "frame-ancestors 'none'; default-src 'self' 'unsafe-inline'",
+      },
+      body: (req) => `<!doctype html><title>Kein Rahmen</title><script>
+  const info = { loaded: true, cookieHeader: ${JSON.stringify(String(req.headers.cookie || ''))}, cookie: document.cookie };
+  const start = Date.now();
+  const tryIt = () => {
+    if (!window.chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+      if (Date.now() - start > 3000) return parent.postMessage({ noframe: { ...info, bridge: 'missing' } }, '*');
+      return setTimeout(tryIt, 50);
+    }
+    chrome.runtime.sendMessage('fcoeoabgfenejglbffodgkkbkcdhcgfn', { type: 'ping' }, (res) => {
+      const lastError = chrome.runtime.lastError && chrome.runtime.lastError.message;
+      parent.postMessage({ noframe: { ...info, bridge: 'ok', res, lastError } }, '*');
+    });
+  };
+  tryIt();
+</script>`,
+    },
+    '/setcookie': {
+      headers: { 'Content-Type': 'text/html', 'Set-Cookie': 'e2esid=abc123; Path=/; SameSite=Lax' },
+      body: '<!doctype html><title>Cookie</title><p>Cookie gesetzt</p>',
+    },
+    '/embedder': {
+      headers: { 'Content-Type': 'text/html' },
+      body: `<!doctype html><title>Einbetter</title><script>
+  window.noframeMessage = null;
+  addEventListener('message', (e) => { if (e.data && e.data.noframe) window.noframeMessage = e.data.noframe; });
+</script><iframe src="/noframe"></iframe>`,
+    },
     '/api/data': { headers: { 'Content-Type': 'application/json' }, body: '{"ok":true}' },
     '/external': {
       headers: { 'Content-Type': 'text/html' },
