@@ -137,11 +137,23 @@ function looksLikeSidePanelCommand(name, command) {
 }
 
 /**
+ * Vierte Stelle der Versionsnummer: Port-Version plus optionaler Zähler,
+ * z. B. 0.1.3 → 10300, mit Zähler 2 → 10302. So hat jede Port-Version eine
+ * höhere Nummer – addons.mozilla.org nimmt jede Versionsnummer nur einmal an.
+ */
+export function versionBuildNumber(portVersion, suffix = 0) {
+  const match = String(portVersion || '').match(/^(\d+)\.(\d+)\.(\d+)/);
+  const [major, minor, patch] = match ? match.slice(1).map(Number) : [0, 0, 0];
+  return major * 1000000 + minor * 10000 + patch * 100 + (Number(suffix) || 0);
+}
+
+/**
  * @param {object} chromeManifest  Original-Manifest aus der CRX
  * @param {object} [options]
  * @param {string} [options.geckoId]
  * @param {string|null} [options.chromeExtensionId]
- * @param {string} [options.versionSuffix]
+ * @param {string} [options.versionSuffix]  Zähler 0–99 für die letzte Stelle der Version
+ * @param {string} [options.portVersion]  Version dieses Ports (package.json)
  * @param {boolean} [options.keepName]
  * @param {string} [options.name]  eigener Name des Add-ons
  * @returns {{ manifest: object, config: object, report: object }}
@@ -186,10 +198,13 @@ export function transformManifest(chromeManifest, options = {}) {
     m.author = m.author.email || m.author.name || undefined;
     if (!m.author) delete m.author;
   }
-  if (options.versionSuffix) {
+  if (options.portVersion || options.versionSuffix) {
     const parts = String(m.version).split('.');
-    if (parts.length >= 4) report.warnings.push('Version hat schon 4 Stellen – Suffix wird ignoriert.');
-    else m.version = `${m.version}.${options.versionSuffix}`;
+    if (parts.length >= 4) {
+      report.warnings.push('Version hat schon 4 Stellen – keine Port-Nummer angehängt.');
+    } else {
+      m.version = `${m.version}.${versionBuildNumber(options.portVersion, options.versionSuffix)}`;
+    }
   }
 
   // --- Firefox-spezifische Einstellungen ------------------------------------
