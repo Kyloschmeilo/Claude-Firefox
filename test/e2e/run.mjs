@@ -72,7 +72,7 @@ async function main() {
       return;
     }
     res.writeHead(page.status || 200, { 'Access-Control-Allow-Origin': '*', ...page.headers });
-    res.end(page.body);
+    res.end(typeof page.body === 'function' ? page.body(req) : page.body);
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;

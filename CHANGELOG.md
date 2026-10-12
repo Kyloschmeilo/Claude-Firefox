@@ -2,6 +2,33 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionsnummern folgen [SemVer](https://semver.org/lang/de/).
 
+## [0.1.2] – 2026-10-12
+
+### Behoben
+
+- Die Sidebar zeigte bei aktuellen Versionen der Extension nur „Firefox darf diese eingebettete Seite nicht öffnen“.
+  Die Extension bettet claude.ai in das Seitenpanel ein. Chrome erlaubt das, Firefox blockierte es wegen der
+  Schutz-Header von claude.ai (`X-Frame-Options`, `frame-ancestors`). Der Port hebt diese Header jetzt per
+  `declarativeNetRequest` auf, aber nur für Rahmen in Seiten der Extension und in der Sidebar. Normale Webseiten
+  dürfen claude.ai weiterhin nicht einbetten.
+- Die Verbindung zwischen claude.ai und der Extension (Ersatz für `externally_connectable`) funktioniert jetzt auch
+  im eingebetteten claude.ai.
+
+### Teststand
+
+- Neue End-to-End-Prüfungen: eingebettete Seite mit `X-Frame-Options`/`frame-ancestors` lädt, Cookies kommen an
+  (nicht partitioniert, `SameSite=Lax`), Nachrichten an die Extension funktionieren, normale Webseiten bleiben
+  blockiert. Getestet mit Firefox 157 gegen die ältere Extension-Version 1.0.70. Mit der aktuellen Version (1.0.100)
+  ist die Korrektur nicht getestet.
+
+### So benutzt du es
+
+Neu bauen wie bei 0.1.0. Wer das Add-on über addons.mozilla.org signiert: mit derselben `--gecko-id` und einer
+höheren `--version-suffix` bauen und als neue Version hochladen.
+
+> Inoffizielles Projekt, nicht von Anthropic. Die Extension ist proprietäre Software von Anthropic. Nutzung nur privat
+> und auf eigenes Risiko. Gebaute Dateien nicht weitergeben.
+
 ## [0.1.1] – 2026-10-12
 
 ### Geändert

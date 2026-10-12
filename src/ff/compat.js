@@ -100,6 +100,31 @@
     return a;
   };
 
+  // --- Eigene Sitzungsregeln (Einbetten, siehe background.js) ----------------
+  // Vor dem Original verstecken, damit es sie nicht versehentlich löscht.
+  const ffRuleIds = [1999999001, 1999999002];
+  const dnrApi = api.declarativeNetRequest;
+  if (dnrApi && typeof dnrApi.getSessionRules === 'function' && typeof dnrApi.updateSessionRules === 'function') {
+    const rawGet = dnrApi.getSessionRules;
+    const rawUpdate = dnrApi.updateSessionRules;
+    ff.sessionRules = {
+      ids: ffRuleIds,
+      get: () => rawGet.call(dnrApi),
+      update: (options) => rawUpdate.call(dnrApi, options),
+    };
+    dnrApi.getSessionRules = ff.chromeApi(async (...args) =>
+      (await rawGet.apply(dnrApi, args)).filter((r) => !ffRuleIds.includes(r.id)),
+    );
+  }
+  const withoutOwnRules = (args) => {
+    const a = [...args];
+    const o = a[0];
+    if (isPlainObject(o) && Array.isArray(o.removeRuleIds)) {
+      a[0] = { ...o, removeRuleIds: o.removeRuleIds.filter((id) => !ffRuleIds.includes(id)) };
+    }
+    return a;
+  };
+
   wrapApi('tabs', 'create', { transform: withUrl });
   wrapApi('tabs', 'update', { transform: withUrl });
   wrapApi('windows', 'create', { transform: withUrl });
@@ -116,11 +141,11 @@
     ['scripting', 'executeScript'],
     ['scripting', 'insertCSS'],
     ['alarms', 'create'],
-    ['declarativeNetRequest', 'updateSessionRules'],
     ['declarativeNetRequest', 'updateDynamicRules'],
   ]) {
     wrapApi(ns, fn);
   }
+  wrapApi('declarativeNetRequest', 'updateSessionRules', { transform: withoutOwnRules });
 
   // --- declarativeNetRequest: Konstanten, die Firefox nicht mitliefert ---------
   const dnr = api.declarativeNetRequest;

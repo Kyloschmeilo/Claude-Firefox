@@ -442,6 +442,40 @@ async function run() {
     check('Fremde OAuth-Weiterleitung wird ignoriert', last && last.url.includes('evil-code') && last.via === 'ignored', last);
   });
 
+  await step('Eingebettete Webseite in Seite der Extension', async () => {
+    // Cookie als Erstanbieter setzen (wie ein Login auf claude.ai im Tab).
+    const ct = await chrome.tabs.create({ url: `${BASE}/setcookie`, active: false });
+    await waitTab(ct.id);
+    await chrome.tabs.remove(ct.id);
+    const got = new Promise((resolve) => {
+      const onMsg = (e) => {
+        if (e.data && e.data.noframe) {
+          removeEventListener('message', onMsg);
+          resolve(e.data.noframe);
+        }
+      };
+      addEventListener('message', onMsg);
+      setTimeout(() => resolve(null), 8000);
+    });
+    const frame = document.createElement('iframe');
+    frame.src = `${BASE}/noframe`;
+    document.body.appendChild(frame);
+    const info = await got;
+    check('Seite mit X-Frame-Options/frame-ancestors lädt im Rahmen', info && info.loaded, info);
+    check('Cookies im Rahmen (nicht partitioniert, SameSite=Lax)', info && /e2esid=abc123/.test(info.cookieHeader) && /e2esid=abc123/.test(info.cookie), info);
+    const answered = info && /Untrusted origin/.test(JSON.stringify(info.res || ''));
+    check('chrome.runtime.sendMessage im Rahmen', info && info.bridge === 'ok' && answered, info);
+    frame.remove();
+
+    // In normalen Webseiten bleibt das Einbetten verboten.
+    const et = await chrome.tabs.create({ url: `${BASE}/embedder`, active: false });
+    await waitTab(et.id);
+    await sleep(1500);
+    const msg = await inPage(et.id, () => window.noframeMessage);
+    await chrome.tabs.remove(et.id);
+    check('Webseiten dürfen die Seite weiterhin nicht einbetten', msg === null, msg);
+  });
+
   await step('Seitenpanel lädt', async () => {
     const frame = document.createElement('iframe');
     frame.src = `/sidepanel.html?tabId=${tabId}`;

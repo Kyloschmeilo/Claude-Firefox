@@ -143,7 +143,8 @@ Rückgängig machen: dasselbe Skript mit `-Uninstall` aufrufen.
 | `chrome.debugger` (CDP: Klicks, Tippen, Screenshots, JavaScript, Konsole, Netzwerk) | `engine.js` im Hintergrund + `cdp-agent.js` in der Seite. Nutzt `tabs.captureTab`, `scripting.executeScript`, `webRequest` und synthetische Events. |
 | `chrome.sidePanel` | `sidebarAction`, eine Sitzung pro Fenster |
 | `chrome.offscreen` | verstecktes iframe im Hintergrund |
-| `externally_connectable` (claude.ai ↔ Extension, Anmeldung) | `claude-bridge-main.js` + `claude-bridge.js` |
+| `externally_connectable` (claude.ai ↔ Extension, Anmeldung) | `claude-bridge-main.js` + `claude-bridge.js` (auch in eingebetteten Rahmen) |
+| claude.ai eingebettet im Seitenpanel (Chrome lässt `chrome-extension://` als Einbetter zu) | `declarativeNetRequest`-Sitzungsregeln entfernen `X-Frame-Options`/CSP – nur für Rahmen in Seiten der Extension und in der Sidebar |
 | OAuth-Weiterleitung auf `chrome-extension://` | wird per `webNavigation`/`webRequest`/Navigation API abgefangen |
 | Service-Worker-Erkennung | `ServiceWorkerGlobalScope` im Hintergrund |
 | Chrome-only-Optionen (z. B. Benachrichtigungs-Buttons) | werden automatisch entfernt |
@@ -188,6 +189,9 @@ benutzt. Geprüft werden unter anderem:
   siehe oben).
 - **Sidebar bleibt bei „Claude wird gestartet …“:** In `about:debugging` beim Add-on auf
   „Untersuchen“ klicken und die Konsole auf Fehler prüfen. Danach das Add-on neu laden.
+- **Sidebar zeigt „Firefox darf diese eingebettete Seite nicht öffnen“:** Das betrifft
+  Builds vor Version 0.1.2. Aktuelle Version herunterladen, neu bauen und das Add-on neu
+  installieren.
 - **Anmeldung klappt nicht:** Melde dich zuerst auf claude.ai im selben Firefox an und
   starte die Anmeldung in der Sidebar dann erneut. Hilft das nicht: In der Konsole des
   Add-ons (siehe oben) nach `OAuth` suchen und das Ergebnis als Issue melden.

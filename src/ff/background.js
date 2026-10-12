@@ -263,7 +263,8 @@
   api.runtime.onMessage.addListener((msg, sender) => {
     if (!msg || typeof msg !== 'object') return undefined;
     if (msg.__ffExternal) {
-      if (sender.id !== api.runtime.id || !sender.tab || !isConnectableUrl(sender.url)) {
+      // Ohne Tab: claude.ai eingebettet in einer Seite der Extension (Seitenpanel).
+      if (sender.id !== api.runtime.id || !isConnectableUrl(sender.url)) {
         return Promise.resolve({ error: 'Untrusted sender' });
       }
       const { extensionId, message } = msg.__ffExternal;
@@ -273,8 +274,8 @@
       return dispatchExternal(message, externalSender(sender));
     }
     if (msg.__ffExternalRedirect) {
-      if (sender.id !== api.runtime.id || !sender.tab || !isConnectableUrl(sender.url)) return undefined;
-      handleRedirect(String(msg.__ffExternalRedirect), sender.tab, new URL(sender.url).origin);
+      if (sender.id !== api.runtime.id || !isConnectableUrl(sender.url)) return undefined;
+      handleRedirect(String(msg.__ffExternalRedirect), sender.tab || null, new URL(sender.url).origin);
       return Promise.resolve({ ok: true });
     }
     return undefined;
@@ -309,7 +310,7 @@
       return;
     }
     // So behandeln, als hätte claude.ai die Weiterleitung per Nachricht geschickt.
-    const sender = { url: tab && tab.url, origin, tab, frameId: 0, documentLifecycle: 'active' };
+    const sender = { url: tab && tab.url, origin, tab: tab || undefined, frameId: 0, documentLifecycle: 'active' };
     const result = await dispatchExternal({ type: 'oauth_redirect', redirect_uri: url }, sender);
     ff.lastRedirect = { url, at: now, via: 'message', result };
     ff.log('OAuth-Weiterleitung verarbeitet', result);
@@ -343,6 +344,40 @@
     if (!tab || !isConnectableUrl(tab.url)) return;
     handleRedirect(d.url, tab, new URL(tab.url).origin);
   });
+
+  // --- Webseiten in Seiten der Extension einbetten ---------------------------
+  // Das Seitenpanel zeigt claude.ai in einem iframe. Chrome erlaubt das, weil
+  // claude.ai chrome-extension://<id> als Einbetter zulässt. Firefox-Seiten
+  // haben aber moz-extension://<uuid> – dann blockieren X-Frame-Options und
+  // frame-ancestors. Firefox wendet bei Manifest V3 nur Header-Änderungen per
+  // declarativeNetRequest an (nicht per webRequest), daher zwei Sitzungsregeln:
+  //  1. Rahmen, die eine Seite dieser Extension lädt
+  //  2. Rahmen ohne Tab, also in der Sidebar (auch nach Navigation im Rahmen)
+  async function allowFramingInOwnPages() {
+    const rules = ff.sessionRules;
+    if (!rules) return;
+    const action = {
+      type: 'modifyHeaders',
+      responseHeaders: [
+        { header: 'x-frame-options', operation: 'remove' },
+        { header: 'content-security-policy', operation: 'remove' },
+      ],
+    };
+    const ownHost = new URL(api.runtime.getURL('')).hostname;
+    const [initiatorRule, sidebarRule] = rules.ids;
+    try {
+      await rules.update({
+        removeRuleIds: rules.ids,
+        addRules: [
+          { id: initiatorRule, priority: 1, action, condition: { resourceTypes: ['sub_frame'], initiatorDomains: [ownHost] } },
+          { id: sidebarRule, priority: 1, action, condition: { resourceTypes: ['sub_frame'], tabIds: [-1] } },
+        ],
+      });
+    } catch (err) {
+      ff.warn('Einbetten von Webseiten nicht möglich:', err);
+    }
+  }
+  allowFramingInOwnPages();
 
   // --- Tastenkürzel für die Sidebar -----------------------------------------
   const sidePanelCommands = new Set((config.sidePanelCommands || []).filter((c) => !c.startsWith('_execute')));
