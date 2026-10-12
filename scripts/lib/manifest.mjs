@@ -143,6 +143,7 @@ function looksLikeSidePanelCommand(name, command) {
  * @param {string|null} [options.chromeExtensionId]
  * @param {string} [options.versionSuffix]
  * @param {boolean} [options.keepName]
+ * @param {string} [options.name]  eigener Name des Add-ons
  * @returns {{ manifest: object, config: object, report: object }}
  */
 export function transformManifest(chromeManifest, options = {}) {
@@ -172,8 +173,14 @@ export function transformManifest(chromeManifest, options = {}) {
   }
 
   // --- Name / Version --------------------------------------------------------
-  if (!options.keepName && typeof m.name === 'string' && !m.name.startsWith('__MSG_')) {
-    m.name = `${m.name} (Firefox-Port)`;
+  // Kein "Firefox" im Namen: addons.mozilla.org lehnt Namen mit Mozilla-Marken ab.
+  if (typeof options.name === 'string' && options.name.trim()) {
+    m.name = options.name.trim();
+  } else if (!options.keepName && typeof m.name === 'string' && !m.name.startsWith('__MSG_')) {
+    m.name = `${m.name} (inoffizieller Port)`;
+  }
+  if (typeof m.name === 'string' && /firefox|mozilla/i.test(m.name)) {
+    report.warnings.push('Der Name enthält „Firefox“/„Mozilla“ – addons.mozilla.org lehnt solche Namen ab.');
   }
   if (typeof m.author === 'object' && m.author) {
     m.author = m.author.email || m.author.name || undefined;

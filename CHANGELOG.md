@@ -2,6 +2,26 @@
 
 Alle nennenswerten Änderungen an diesem Projekt. Versionsnummern folgen [SemVer](https://semver.org/lang/de/).
 
+## [0.1.1] – 2026-10-12
+
+### Geändert
+
+- Der Name des Add-ons enthält kein „Firefox“ mehr. addons.mozilla.org lehnt Namen mit Mozilla-Marken ab.
+  Standard ist jetzt `<Original> (inoffizieller Port)` statt `<Original> (Firefox-Port)`.
+
+### Neu
+
+- Build-Option `--name <text>` für einen eigenen Add-on-Namen. Enthält er „Firefox“ oder „Mozilla“, warnt der Build.
+
+### So benutzt du es
+
+Wie bei 0.1.0: Quellcode („Source code (zip)“) herunterladen, entpacken, `build.cmd` doppelklicken und die
+`.xpi` aus `dist\` in Firefox unter `about:debugging#/runtime/this-firefox` → „Temporäres Add-on laden…“ öffnen.
+Hinweise und Einschränkungen: siehe Version 0.1.0 und die README.
+
+> Inoffizielles Projekt, nicht von Anthropic. Die Extension ist proprietäre Software von Anthropic. Nutzung nur privat
+> und auf eigenes Risiko. Gebaute Dateien nicht weitergeben.
+
 ## [0.1.0] – 2026-10-11
 
 Erste Version: Die offizielle Claude-Browser-Extension („Claude in Chrome“) wird lokal auf deinem Rechner zu einem

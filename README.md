@@ -158,7 +158,8 @@ node scripts/build.mjs --help
                          %LOCALAPPDATA%\Google\Chrome\User Data\Default\Extensions\fcoeoabgfenejglbffodgkkbkcdhcgfn
   --gecko-id <id>        eigene Firefox-Add-on-ID
   --version-suffix <n>   Versionsnummer um ".n" ergänzen
-  --keep-name            Namen nicht um „(Firefox-Port)“ ergänzen
+  --name <text>          eigener Name für das Add-on (ohne „Firefox“)
+  --keep-name            Namen nicht um „(inoffizieller Port)“ ergänzen
   --no-xpi               nur den entpackten Ordner dist/extension erzeugen
 ```
 
