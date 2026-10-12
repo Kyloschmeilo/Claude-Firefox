@@ -174,7 +174,8 @@ const CHROME_MANIFEST = {
 
 test('Manifest: Grundumbau Chrome -> Firefox', () => {
   const { manifest: m, config, report } = transformManifest(CHROME_MANIFEST, { chromeExtensionId: 'x'.repeat(32) });
-  assert.equal(m.name, 'Claude (Firefox-Port)');
+  assert.equal(m.name, 'Claude (inoffizieller Port)');
+  assert.doesNotMatch(m.name, /firefox/i);
   assert.deepEqual(m.background, { scripts: [...BACKGROUND_SHIMS, 'service-worker-loader.js'], type: 'module' });
   assert.equal(m.sidebar_action.default_panel, 'ff/sidebar.html');
   assert.equal(m.side_panel, undefined);
@@ -218,6 +219,8 @@ test('Manifest: Optionen', () => {
   });
   assert.equal(m.name, 'Claude');
   assert.equal(m.version, '1.2.3.7');
+  assert.equal(transformManifest(CHROME_MANIFEST, { name: '  Mein Claude ' }).manifest.name, 'Mein Claude');
+  assert.ok(transformManifest(CHROME_MANIFEST, { name: 'Claude für Firefox' }).report.warnings.some((w) => /Firefox/.test(w)));
   assert.equal(m.browser_specific_settings.gecko.id, 'ich@beispiel');
   assert.deepEqual(config.chromeExtensionIds, [DEFAULT_CHROME_EXTENSION_ID]);
   assert.throws(() => transformManifest({ ...CHROME_MANIFEST, manifest_version: 2 }), /Manifest V3/);

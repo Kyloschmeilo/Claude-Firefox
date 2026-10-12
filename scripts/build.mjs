@@ -38,7 +38,8 @@ Weitere Optionen:
   --out <ordner>         Ausgabeordner (Standard: dist)
   --gecko-id <id>        Firefox-Add-on-ID (Standard: claude-firefox-port@localhost)
   --version-suffix <n>   Hängt ".n" an die Versionsnummer an
-  --keep-name            Namen der Extension nicht um "(Firefox-Port)" ergänzen
+  --name <text>          Eigener Name für das Add-on (ohne "Firefox", sonst lehnt AMO ab)
+  --keep-name            Namen der Extension nicht um "(inoffizieller Port)" ergänzen
   --no-xpi               Nur den entpackten Ordner erzeugen
   -h, --help             Diese Hilfe
 `;
@@ -186,6 +187,7 @@ export async function build(opts = {}) {
     chromeExtensionId,
     versionSuffix: opts.versionSuffix,
     keepName: opts.keepName,
+    name: opts.name,
     portVersion: pkg.version,
   });
   console.log(`• ${chromeManifest.name} ${chromeManifest.version} (Chrome-ID ${chromeExtensionId})`);
@@ -254,6 +256,7 @@ async function main() {
       'gecko-id': { type: 'string' },
       'version-suffix': { type: 'string' },
       'keep-name': { type: 'boolean' },
+      name: { type: 'string' },
       'no-xpi': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -273,6 +276,7 @@ async function main() {
     geckoId: values['gecko-id'],
     versionSuffix: values['version-suffix'],
     keepName: values['keep-name'],
+    name: values.name,
     noXpi: values['no-xpi'],
   });
   console.log('\nFertig. Installation in Firefox: siehe README.md, Abschnitt "Installation".');
